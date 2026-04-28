@@ -217,14 +217,6 @@ Metrics:
 
 ---
 
-## Key References
-
-- **MMed-RAG** (ICLR 2025): Versatile Multimodal RAG for Medical VLMs — https://arxiv.org/abs/2410.13085
-- **FactMM-RAG** (NAACL 2025): Fact-Aware Multimodal RAG for Radiology Reports — https://arxiv.org/abs/2407.15268
-- **MedGemma** (Google, 2025): Medical Vision-Language Model — https://huggingface.co/google/medgemma-4b-it
-- **MedGemma Knee OA Baseline** (Bao Do et al., 2026): Open-weight fine-tuned checkpoint — https://kaggle.com/competitions/med-gemma-impact-challenge
-- **OAI Dataset**: Osteoarthritis Initiative — https://nda.nih.gov/oai
-- **BiomedCLIP**: https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
 
 ---
 
