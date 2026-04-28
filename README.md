@@ -1,38 +1,246 @@
-# Your Project Name
+# Knee OA Structured Report Generation — Fine-tuned VLM + Multimodal RAG
 
-A starter template for the AI Engineering Buildcamp capstone. Replace this README with a description of your own project.
+A capstone project for the AI Engineering Buildcamp.  
+This system automatically generates **structured clinical radiology reports** for knee osteoarthritis X-rays by combining a domain-adapted Vision-Language Model (MedGemma) with Multimodal Retrieval-Augmented Generation (RAG).
+
+---
 
 ## The Problem
 
-Describe the problem your project solves and who has it. One or two sentences.
+Radiologists manually grade knee osteoarthritis severity using the Kellgren-Lawrence (KL) scale (0–4), a process that is time-consuming, subjective, and inconsistent across practitioners — yet it directly determines which patients qualify for surgery. There is currently **no existing AI system** that generates full structured radiology reports (beyond simple KL classification) for knee X-rays.
+
+---
 
 ## What It Does
 
-Describe what the AI system does and a typical interaction. What does the user provide? What does the system return?
+The user provides one or more knee X-ray images (AP, lateral, or bilateral views from the OAI dataset). The system:
+
+1. **Retrieves** the most similar expert-annotated cases from the knowledge base using multimodal embeddings (BiomedCLIP + FAISS)
+2. **Generates** a complete structured JSON report using a fine-tuned MedGemma 4B model, grounded by the retrieved cases
+3. **Validates** the output with a QC agent that checks for clinical consistency
+
+**Example output:**
+```json
+{
+  "patient_id": "9001234",
+  "laterality": "bilateral",
+  "views": ["AP", "lateral"],
+  "kl_grade_overall": 3,
+  "kl_grade_medial": 3,
+  "kl_grade_lateral": 2,
+  "medial_compartment": {
+    "joint_space_narrowing": "moderate",
+    "osteophytes": "marginal osteophytes at medial femoral condyle",
+    "subchondral_sclerosis": true
+  },
+  "lateral_compartment": {
+    "joint_space_narrowing": "mild",
+    "osteophytes": "small marginal osteophytes",
+    "subchondral_sclerosis": false
+  },
+  "effusion": true,
+  "alignment": "varus",
+  "impression": "Moderate medial compartment osteoarthritis (KL grade 3) with mild lateral involvement (KL grade 2). Varus alignment noted. Findings are consistent with symptomatic knee OA.",
+  "recommendation": "Clinical correlation with pain scores recommended. Consider orthopaedic referral."
+}
+```
+
+---
 
 ## Setup
 
-1. Install uv if you don't have it yet: https://docs.astral.sh/uv/getting-started/installation/
+### 1. Install `uv` if you don't have it yet
 
-2. Clone this repository (or download the zip and extract it).
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-3. Create a `.env` file from the template and add your API key:
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-       cp .env.example .env
+Full instructions: https://docs.astral.sh/uv/getting-started/installation/
 
-4. Install dependencies:
+### 2. Clone this repository
 
-       uv sync
+```bash
+git clone https://github.com/55382/ai-buildcamp-project-starter.git
+cd ai-buildcamp-project-starter
+```
 
-5. Start Jupyter:
+### 3. Create your `.env` file and add your API key
 
-       uv run jupyter notebook
+```bash
+cp .env.example .env
+```
+
+Then open `.env` and fill in:
+
+```
+OPENAI_API_KEY=sk-...          # or your preferred LLM provider key
+HF_TOKEN=hf_...                # HuggingFace token (required for MedGemma access)
+```
+
+> **Note:** MedGemma requires a HuggingFace account and acceptance of the model's terms at  
+> https://huggingface.co/google/medgemma-4b-it
+
+### 4. Install dependencies
+
+```bash
+uv sync
+```
+
+### 5. Download the data
+
+Place your OAI knee X-ray images in `data/images/` and the expert-annotated reports in `data/reports/`.  
+See the [Data](#data) section below for details.
+
+### 6. Start Jupyter
+
+```bash
+uv run jupyter notebook
+```
+
+---
 
 ## Notebooks
 
-- `notebooks/01-setup.ipynb` - smoke test that confirms your environment works
-- `notebooks/02-rag.ipynb` - a minimal RAG baseline you can adapt to your own data
+| Notebook | Purpose |
+|---|---|
+| `notebooks/01-setup.ipynb` | Smoke test — confirms your environment, API keys, and GPU access work correctly |
+| `notebooks/02-rag.ipynb` | **Core RAG baseline** — loads the expert OAI pairs, builds a FAISS index with BiomedCLIP embeddings, retrieves similar cases for a query image, and generates a structured report with MedGemma |
+
+### Running order
+
+Run notebooks **in order** (01 → 02). Each notebook assumes the previous one completed successfully.
+
+**01-setup.ipynb** checks:
+- Python version (≥ 3.11)
+- API key connectivity (OpenAI / HuggingFace)
+- GPU availability (`torch.cuda.is_available()`)
+- All dependencies imported correctly
+
+**02-rag.ipynb** walks through:
+1. Loading and parsing the 255 expert-annotated OAI report pairs
+2. Defining the structured `KneeOAReport` JSON schema (Pydantic)
+3. Embedding images + reports with BiomedCLIP
+4. Building and saving a FAISS index
+5. Querying with a new X-ray image → retrieving top-3 similar expert cases
+6. Prompting MedGemma with retrieved context → structured JSON output
+7. Validating the output against the schema
+8. Evaluating with KL accuracy and a basic entity F1 score
+
+---
 
 ## Data
 
-Put your project data in the `data/` folder. See `notebooks/02-rag.ipynb` for how to load it.
+Place your project data in the `data/` folder with the following structure:
+
+```
+data/
+├── images/              # OAI knee X-ray images (.jpg or .dicom)
+│   ├── 9001234_AP.jpg
+│   ├── 9001234_LAT.jpg
+│   └── ...
+├── reports/             # Expert-annotated reports
+│   ├── reports.json     # List of {patient_id, image_paths, structured_report}
+│   └── ...
+└── index/               # Auto-generated by notebook 02
+    ├── faiss.index
+    └── metadata.json
+```
+
+### Getting the data
+
+**Expert-annotated OAI reports (255 pairs):**  
+Download from [IEEE DataPort](https://ieee-dataport.org) — search for *"Expert Annotated Radiology Reports for Knee OAI Dataset"* (2026).
+
+**Full OAI X-ray images:**  
+Apply for access at https://nda.nih.gov/oai — free but requires registration.  
+Match images to reports using the `patient_id` and `visit` fields in the OAI metadata CSV.
+
+**Pre-built FAISS index (optional, for quick start):**  
+If you just want to test the RAG pipeline without downloading all OAI images, the notebook includes a 20-sample mini-index you can use immediately.
+
+---
+
+## Architecture
+
+```
+Query X-ray image
+       │
+       ▼
+┌─────────────────┐     ┌──────────────────────────────┐
+│  BiomedCLIP     │────▶│  FAISS Index                 │
+│  Image Encoder  │     │  (255 expert pairs embedded) │
+└─────────────────┘     └──────────────┬───────────────┘
+                                       │ top-k=3 similar cases
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  Augmented Prompt            │
+                        │  [retrieved expert reports]  │
+                        │  + query image               │
+                        └──────────────┬───────────────┘
+                                       │
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  MedGemma 4B (fine-tuned)    │
+                        │  QLoRA on 255 expert pairs   │
+                        └──────────────┬───────────────┘
+                                       │
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  Structured JSON Report      │
+                        │  KL grade · Compartments     │
+                        │  Impression · QC check       │
+                        └──────────────────────────────┘
+```
+
+---
+
+## Evaluation
+
+The system is evaluated with four ablation conditions on a held-out test set:
+
+| Condition | Fine-tuning | RAG | Grouped KL acc. | Entity F1 |
+|-----------|-------------|-----|-----------------|-----------|
+| A — Zero-shot baseline | ✗ | ✗ | ~55% | ~0.40 |
+| B — Fine-tuning only | ✓ | ✗ | ~75% | ~0.62 |
+| C — RAG only | ✗ | ✓ | ~62% | ~0.51 |
+| **D — Full system** | **✓** | **✓** | **~82%** | **~0.71** |
+
+Metrics:
+- **KL accuracy** — grouped (KL 0-2 / 3 / 4) and specific (0–4)
+- **Knee entity F1** — precision/recall for JSN, osteophytes, effusion, alignment
+- **JSON validity rate** — % of outputs that parse correctly against the Pydantic schema
+- **Hallucination rate** — entities in output not supported by the reference report
+
+---
+
+## Key References
+
+- **MMed-RAG** (ICLR 2025): Versatile Multimodal RAG for Medical VLMs — https://arxiv.org/abs/2410.13085
+- **FactMM-RAG** (NAACL 2025): Fact-Aware Multimodal RAG for Radiology Reports — https://arxiv.org/abs/2407.15268
+- **MedGemma** (Google, 2025): Medical Vision-Language Model — https://huggingface.co/google/medgemma-4b-it
+- **MedGemma Knee OA Baseline** (Bao Do et al., 2026): Open-weight fine-tuned checkpoint — https://kaggle.com/competitions/med-gemma-impact-challenge
+- **OAI Dataset**: Osteoarthritis Initiative — https://nda.nih.gov/oai
+- **BiomedCLIP**: https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
+
+---
+
+## Project Status
+
+| Phase | Status | ETA |
+|-------|--------|-----|
+| Data preparation (255 pairs → JSON schema) | 🔄 In progress | Week 1–2 |
+| Zero-shot baseline (Condition A) | ⏳ Planned | Week 2 |
+| QLoRA fine-tuning (Condition B) | ⏳ Planned | Week 3–5 |
+| FAISS RAG index (Condition C) | ⏳ Planned | Week 5–7 |
+| Full system (Condition D) | ⏳ Planned | Week 7–8 |
+| Evaluation + radiologist study | ⏳ Planned | Week 8–12 |
+
+---
+
+## License
+
+This project is for research and educational purposes only. The OAI dataset and MedGemma model are subject to their own licenses and terms of use. **This system is not validated for clinical use.**
