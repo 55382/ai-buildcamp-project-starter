@@ -1,4 +1,4 @@
-# Knee OA Structured Report Generation — Fine-tuned VLM + Multimodal RAG
+# Knee OA Structured Report Generation : Fine-tuned VLM + Multimodal RAG
 
 A capstone project for the AI Engineering Buildcamp.  
 This system automatically generates **structured clinical radiology reports** for knee osteoarthritis X-rays by combining a domain-adapted Vision-Language Model (MedGemma) with Multimodal Retrieval-Augmented Generation (RAG).
